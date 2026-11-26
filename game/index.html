@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kestrel Run — Island Hopper</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #0a1622; font-family: "Segoe UI", system-ui, sans-serif; }
+  #stage { position: relative; width: 100vw; height: 100vh; }
+  #game { display: block; width: 100%; height: 100%; }
+  .hidden { display: none !important; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  /* --- HUD: instruments the pilot actually flies by --- */
+  #hud { position: absolute; inset: 0; pointer-events: none; color: #f5f2e8; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  .panel { position: absolute; background: rgba(8, 20, 32, .62); border: 1px solid rgba(245,242,232,.25); border-radius: 10px; padding: 8px 12px; backdrop-filter: blur(2px); }
+  #hud-topleft { top: 12px; left: 12px; display: flex; gap: 14px; align-items: center; }
+  .gauge { text-align: center; min-width: 74px; }
+  .gauge .num { font-size: 26px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .gauge .lab { font-size: 11px; letter-spacing: .14em; opacity: .8; }
+  #hud-horizon { border-radius: 50%; background: rgba(8,20,32,.6); border: 2px solid rgba(245,242,232,.5); }
+  #hud-compass { display: block; border-radius: 6px; margin-top: 4px; }
+  #hud-topright { top: 12px; right: 12px; width: 210px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 12px; letter-spacing: .08em; }
+  .bar { flex: 1; height: 10px; background: rgba(255,255,255,.18); border-radius: 5px; overflow: hidden; }
+  .bar .fill { height: 100%; background: #37d67a; border-radius: 5px; transition: width .2s; }
+  .bar .fill.low { background: #ff5030; }
+  #hud-thr-fill { background: #ffb020; }
+  .pills { display: flex; gap: 6px; margin-top: 6px; }
+  .pill { font-size: 11px; letter-spacing: .1em; padding: 3px 8px; border-radius: 20px; background: rgba(255,255,255,.14); }
+  .pill.ok { background: #1d7a44; }
+  .pill.warn { background: #a33d00; }
+  #hud-missionbar { bottom: 12px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 340px; }
+  #hud-mission { font-size: 19px; font-weight: 800; letter-spacing: .18em; color: #ffb020; }
+  #hud-objective { font-size: 14px; margin-top: 2px; }
+  #hud-progress { font-size: 12px; opacity: .85; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  #hud-arrow { font-size: 22px; color: #ffb020; line-height: 1.1; display: inline-block; transition: transform .15s linear; }
+  #hud-toast {
+    position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+    font-size: 24px; font-weight: 700; color: #fff; background: rgba(8,20,32,.72);
+    padding: 10px 22px; border-radius: 12px; border: 1px solid rgba(255,176,32,.7);
+    opacity: 0; transition: opacity .25s;
+  }
+  #hud-toast.show { opacity: 1; }
+  #hud-help { top: 132px; right: 12px; font-size: 12px; opacity: .75; background: none; border: none; padding: 0; text-align: right; }
+
+  /* --- Screens: title / win / crash --- */
+  .screen {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(6,18,32,.25) 0%, rgba(6,18,32,.78) 100%);
+    color: #f5f2e8; text-align: center; padding: 20px;
+  }
+  /* Screenshot staging: the debrief keeps its text in the top half so the
+     parked plane shows below it. Gameplay never adds this class. */
+  .screen.shot-top { justify-content: flex-start; padding-top: 6vh; }
+  .screen h1 { font-size: 64px; letter-spacing: .12em; color: #ffb020; text-shadow: 0 3px 18px rgba(0,0,0,.7); }
+  .screen h2 { font-size: 20px; font-weight: 400; opacity: .92; margin-top: 6px; }
+  .screen p { max-width: 640px; margin-top: 14px; line-height: 1.55; font-size: 16px; }
+  .missions { display: flex; gap: 14px; margin-top: 26px; flex-wrap: wrap; justify-content: center; }
+  .mission-btn {
+    pointer-events: auto; cursor: pointer; width: 210px; text-align: left;
+    background: rgba(10, 28, 44, .88); border: 2px solid rgba(255,176,32,.55); border-radius: 14px;
+    color: #f5f2e8; padding: 16px;
+  }
+  .mission-btn:hover { border-color: #ffb020; background: rgba(20, 44, 66, .95); }
+  .mission-btn b { display: block; font-size: 19px; letter-spacing: .1em; color: #ffb020; }
+  .mission-btn span { display: block; font-size: 13px; line-height: 1.45; margin-top: 6px; opacity: .9; }
+  .mission-btn .key { font-size: 11px; opacity: .6; margin-top: 8px; letter-spacing: .12em; }
+  .big-btn {
+    pointer-events: auto; cursor: pointer; margin-top: 22px; font-size: 17px; font-weight: 700; letter-spacing: .08em;
+    background: #ffb020; color: #1a1206; border: none; border-radius: 10px; padding: 13px 30px;
+  }
+  .big-btn:hover { background: #ffc44d; }
+  .ghost-btn {
+    pointer-events: auto; cursor: pointer; margin-top: 12px; font-size: 14px; background: none; color: #f5f2e8;
+    border: 1px solid rgba(245,242,232,.5); border-radius: 10px; padding: 9px 20px;
+  }
+  .controls { margin-top: 24px; font-size: 13px; opacity: .8; line-height: 1.7; }
+  .controls b { color: #ffb020; }
+  #win-stats, #over-stats { font-size: 18px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" width="1280" height="720"></canvas>
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <div id="hud" class="hidden">
+    <div id="hud-topleft" class="panel">
+      <canvas id="hud-horizon" width="140" height="140"></canvas>
+      <div class="gauge"><div class="num" id="hud-alt">0 ft</div><div class="lab">ALTITUDE</div></div>
+      <div class="gauge"><div class="num" id="hud-spd">0 kt</div><div class="lab">AIRSPEED</div></div>
+      <div class="gauge"><div class="num" id="hud-hdg">000°</div><div class="lab">HEADING</div></div>
+      <div class="gauge"><div class="num" id="hud-vs" style="font-size:19px">+0 fpm</div><div class="lab">VERT SPEED</div></div>
+    </div>
+    <div id="hud-missionbar" class="panel">
+      <div id="hud-mission">RING RUN</div>
+      <div id="hud-objective">RING 1/8</div>
+      <div id="hud-progress"></div>
+      <div id="hud-arrow">▲</div>
+      <canvas id="hud-compass" width="300" height="44"></canvas>
+    </div>
+    <div id="hud-topright" class="panel">
+      <div class="bar-row"><span>FUEL</span><div class="bar"><div class="fill" id="hud-fuel-fill" style="width:100%"></div></div><span id="hud-fuel-num">100%</span></div>
+      <div class="bar-row"><span>THR</span><div class="bar"><div class="fill" id="hud-thr-fill" style="width:0%"></div></div><span id="hud-thr-num">0%</span></div>
+      <div class="pills"><span class="pill ok" id="hud-gear">GEAR DOWN</span><span class="pill" id="hud-flaps">FLAPS UP</span></div>
+    </div>
+    <div id="hud-toast"></div>
+    <div id="hud-help" class="panel">↑↓ pitch · ←→ roll · Shift/Ctrl throttle · F flaps · G gear · C camera · P pause</div>
+  </div>
+
+  <div id="screen-title" class="screen">
+    <h1>KESTREL RUN</h1>
+    <h2>Island Hopper — a bush-plane flight game over the Meridian Archipelago</h2>
+    <p>Fly the Kestrel, a little orange bush plane, across a turquoise lagoon. Thread the sky rings, hop between three island strips, or push through the squall to deliver the medkit. Throttle discipline, gentle touchdowns and fuel planning decide your score.</p>
+    <div class="missions">
+      <button class="mission-btn" id="btn-ring"><b>1 · RING RUN</b><span>Thread all 8 golden rings over the lagoon. Fast and clean wins.</span><span class="key">PRESS 1</span></button>
+      <button class="mission-btn" id="btn-hop"><b>2 · ISLAND HOP</b><span>Land on all three island strips. Gear down, soft touchdown.</span><span class="key">PRESS 2</span></button>
+      <button class="mission-btn" id="btn-storm"><b>3 · STORM RUN</b><span>Deliver the medkit to Far Isle through gusts. Fuel is tight.</span><span class="key">PRESS 3</span></button>
+    </div>
+    <div class="controls"><b>↑ / ↓</b> pitch &nbsp;·&nbsp; <b>← / →</b> roll &nbsp;·&nbsp; <b>Shift / Ctrl</b> throttle &nbsp;·&nbsp; <b>F</b> flaps &nbsp;·&nbsp; <b>G</b> gear &nbsp;·&nbsp; <b>B</b> brake &nbsp;·&nbsp; <b>C</b> cockpit view &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp; <b>R</b> restart</div>
+  </div>
+
+  <div id="screen-win" class="screen hidden">
+    <h1 id="win-title">MISSION COMPLETE</h1>
+    <div id="win-stats"></div>
+    <button class="big-btn" id="btn-again">FLY AGAIN</button>
+    <button class="ghost-btn" id="btn-menu">BACK TO MENU</button>
+  </div>
+
+  <div id="screen-over" class="screen hidden">
+    <h1 id="over-title">CRASHED</h1>
+    <div id="over-stats"></div>
+    <button class="big-btn" id="btn-retry">TRY AGAIN</button>
+    <button class="ghost-btn" id="btn-menu2">BACK TO MENU</button>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
