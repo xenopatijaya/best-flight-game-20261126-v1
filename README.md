@@ -38,7 +38,8 @@ Or open `game/index.html` from any static server. No network needed: every file 
 
 - A real flight model: lift needs airspeed (stall below 22 m/s and the nose drops), banking turns the heading, flaps trade speed for lift, fuel burns with throttle.
 - Damage that matters: hard landings bend the airframe; ditch in the lagoon or hit a hillside and the run is over.
-- A full instrument panel: altitude, airspeed, heading with a compass strip, artificial horizon, vertical speed, fuel and throttle — plus a next-objective readout.
+- A full instrument panel: airspeed and altitude tapes on the screen edges, altitude, airspeed, heading with a compass strip, artificial horizon, vertical speed, fuel, throttle and damage — plus a next-objective readout and a par time to beat on every sortie.
+- The storm is weather, not just wind: Storm Run flies through visible rain under a grey squall sky, and the cockpit camera puts you behind the windscreen for the landing (the airframe stays out of its own view).
 - Original everything: the archipelago, the Kestrel, the missions and all sounds (procedural WebAudio engine hum, wind, chimes) were made for this game. Three.js is vendored under `game/vendor/` under its MIT license.
 
 ---

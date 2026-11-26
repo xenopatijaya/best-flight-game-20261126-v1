@@ -26,10 +26,10 @@ export const PLANE = {
 };
 
 export const CAMERA = {
-  chaseDistance: 20,
+  chaseDistance: 17.5, // closer in: the Kestrel reads bigger in frame
   chaseHeight: 5.5,
   chaseLag: 10, // smoothing, higher = stiffer
-  cockpitOffset: { x: 0, y: 1.15, z: 1.6 },
+  cockpitOffset: { x: 0, y: 2.2, z: 0.2 }, // above the canopy, over the nose
 };
 
 export const MISSIONS = [

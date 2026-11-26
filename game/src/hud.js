@@ -42,6 +42,41 @@ function drawCompass(canvas, headingDeg) {
   ctx.fill();
 }
 
+/**
+ * Vertical tape: a sliding scale with the current value boxed in amber at
+ * the centre line. value/step/halfWindow in the tape's own units.
+ */
+function drawTape(canvas, value, step, halfWindow) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  const cy = h / 2;
+  const pxPerUnit = h / (halfWindow * 2);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(8, 20, 32, 0.62)';
+  ctx.fillRect(0, 0, w, h);
+  ctx.textBaseline = 'middle';
+  const first = Math.ceil((value - halfWindow) / step) * step;
+  for (let v = first; v <= value + halfWindow; v += step) {
+    const y = cy - (v - value) * pxPerUnit;
+    const major = v % (step * 5) === 0;
+    ctx.fillStyle = '#f5f2e8';
+    ctx.fillRect(4, y - 1, major ? 12 : 7, 2);
+    if (major && v >= 0) {
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(String(v), 20, y);
+    }
+  }
+  // Current value, boxed.
+  ctx.fillStyle = '#ffb020';
+  ctx.fillRect(0, cy - 13, w, 26);
+  ctx.fillStyle = '#101820';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(String(Math.max(0, Math.round(value))), w / 2, cy + 1);
+}
+
 /** Artificial horizon: sky/ground split rotated by roll, shifted by pitch. */
 function drawHorizon(canvas, pitch, roll) {
   const ctx = canvas.getContext('2d');
@@ -99,6 +134,8 @@ export function updateHud(snap, mission, objective) {
   el('hud-vs').textContent = `${snap.vsMs >= 0 ? '+' : ''}${(snap.vsMs * HUD.feetPerM * 60).toFixed(0)} fpm`;
   drawCompass(el('hud-compass'), snap.headingDeg);
   drawHorizon(el('hud-horizon'), snap.pitch, snap.roll);
+  drawTape(el('hud-tape-spd'), speedKt, 10, 50);
+  drawTape(el('hud-tape-alt'), altFt, 100, 500);
 
   const fuelBar = el('hud-fuel-fill');
   fuelBar.style.width = `${Math.max(0, snap.fuel)}%`;
@@ -111,6 +148,9 @@ export function updateHud(snap, mission, objective) {
   el('hud-gear').className = snap.gear ? 'pill ok' : 'pill warn';
   el('hud-flaps').textContent = snap.flaps ? 'FLAPS' : 'FLAPS UP';
   el('hud-flaps').className = snap.flaps ? 'pill ok' : 'pill';
+  const dmg = Math.max(0, Math.min(100, Math.round(snap.damage ?? 0)));
+  el('hud-dmg-fill').style.width = `${dmg}%`;
+  el('hud-dmg-num').textContent = `${dmg}%`;
 
   if (mission) {
     el('hud-mission').textContent = mission.name;
@@ -131,6 +171,9 @@ export function updateHud(snap, mission, objective) {
     if (mission.kind === 2) parts.push(`STRIPS ${mission.stripsLanded.length}/3`);
     parts.push(`SCORE ${mission.score}`);
     parts.push(`TIME ${Math.floor(mission.elapsed / 60)}:${String(Math.floor(mission.elapsed % 60)).padStart(2, '0')}`);
+    if (mission.timePar) {
+      parts.push(`PAR ${Math.floor(mission.timePar / 60)}:${String(mission.timePar % 60).padStart(2, '0')}`);
+    }
     el('hud-progress').textContent = parts.join('  ·  ');
   }
 }

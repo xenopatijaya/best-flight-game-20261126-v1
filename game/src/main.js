@@ -77,12 +77,51 @@ function showScreen(id) {
   if (id) document.getElementById(id).classList.remove('hidden');
 }
 
+/** Best score per sortie, kept on this machine so a return flight has
+ * something to beat. */
+function bestFor(kind) {
+  try {
+    return Number(localStorage.getItem(`kestrel-best-${kind}`) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+function recordBest(kind, score) {
+  const best = Math.max(bestFor(kind), score);
+  try {
+    localStorage.setItem(`kestrel-best-${kind}`, String(best));
+  } catch {
+    // Private mode or no storage: the run still counts, just not kept.
+  }
+  return best;
+}
+
+function fmtClock(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** The debrief line: score, time against the par, fuel left, best ever. */
+function winStatsText() {
+  const best = recordBest(mission.kind, mission.score);
+  const parts = [
+    `Score ${mission.score}`,
+    `Time ${fmtClock(mission.elapsed)}`,
+    `Fuel ${Math.round(flight.state.fuel)}% left`,
+    `Best ${best}`,
+  ];
+  if (mission.timePar) {
+    const diff = mission.timePar - mission.elapsed;
+    parts.push(diff >= 0 ? `Under par by ${fmtClock(diff)}` : `Over par by ${fmtClock(-diff)}`);
+  }
+  return parts.join('  ·  ');
+}
+
 function endRun(win) {
   if (win) {
     screen = SCREEN_WIN;
     document.getElementById('win-title').textContent = `${mission.name} COMPLETE`;
-    document.getElementById('win-stats').textContent =
-      `Score ${mission.score}  ·  Time ${Math.floor(mission.elapsed / 60)}:${String(Math.floor(mission.elapsed % 60)).padStart(2, '0')}  ·  Fuel ${Math.round(flight.state.fuel)}% left`;
+    document.getElementById('win-stats').textContent = winStatsText();
     showScreen('screen-win');
     announce(`${mission.name} complete. Score ${mission.score}.`);
     audio.fanfare();
@@ -114,17 +153,25 @@ function hudSnapshot() {
     vsMs: s.verticalSpeed,
     gear: s.gearDown,
     flaps: s.flaps,
+    damage: s.damage,
   };
 }
 
 function handleMissionEvent(event) {
   if (event === 'ring') {
     audio.ringChime();
-    toast(`RING ${mission.nextRing}/${mission.rings.length} — nice flying!`);
+    // nextRing already counts the ring just taken.
+    toast(`RING ${mission.nextRing} — CLEAN! +100`);
     renderer.setRings(mission.rings, mission.nextRing);
   } else if (event === 'landed') {
     audio.touchdown();
-    toast(`TOUCHDOWN on ${flight.state.landedStrip?.name ?? 'a strip'} — +score for a soft landing`);
+    const l = mission.lastLanding;
+    if (l) {
+      const rating = l.vs <= 1.5 ? 'BUTTERY' : l.vs <= 3 ? 'SMOOTH' : l.vs <= 5 ? 'FIRM' : 'HARD';
+      toast(`TOUCHDOWN ${l.strip} — ${rating} +${l.bonus}`);
+    } else {
+      toast(`TOUCHDOWN on ${flight.state.landedStrip?.name ?? 'a strip'} — +score for a soft landing`);
+    }
   } else if (event === 'complete') {
     endRun(true);
   } else if (event === 'fail') {
@@ -188,6 +235,7 @@ function paint(now) {
       rings: mission.rings,
       nextRing: mission.nextRing,
       showBeacon: mission.kind === MISSION_STORM && !mission.delivered,
+      raining: mission.kind === MISSION_STORM && !mission.delivered,
     },
   );
 }
@@ -202,8 +250,7 @@ function runShot(name) {
     // The win screen carries the result on its own; the HUD would collide
     // with its title, so it stays hidden for this shot.
     document.getElementById('win-title').textContent = `${mission.name} COMPLETE`;
-    document.getElementById('win-stats').textContent =
-      `Score ${mission.score}  ·  Time ${Math.floor(mission.elapsed / 60)}:${String(Math.floor(mission.elapsed % 60)).padStart(2, '0')}  ·  Fuel ${Math.round(flight.state.fuel)}% left`;
+    document.getElementById('win-stats').textContent = winStatsText();
     showScreen('screen-win');
     document.getElementById('screen-win').classList.add('shot-top');
     document.getElementById('hud').classList.add('hidden');

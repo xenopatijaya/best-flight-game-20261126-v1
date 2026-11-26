@@ -1,6 +1,7 @@
 // missions.js — one job: the three sorties — what the pilot must do, how the
 // rings and strips are laid out, and how a run is scored.
 import * as THREE from 'three';
+import { MISSIONS } from './config.js';
 import { STRIPS, heightAt } from './terrain.js';
 
 export const MISSION_RINGS = 1;
@@ -34,9 +35,11 @@ export function stormTarget() {
 }
 
 export function createMission(kind) {
+  const brief = MISSIONS.find((m) => m.id === (kind === MISSION_RINGS ? 'rings' : kind === MISSION_HOP ? 'hop' : 'storm'));
   const mission = {
     kind,
     name: kind === MISSION_RINGS ? 'RING RUN' : kind === MISSION_HOP ? 'ISLAND HOP' : 'STORM RUN',
+    timePar: brief?.timePar ?? 0, // the time to beat; shown on the HUD, judged on the debrief
     startedAt: 0,
     elapsed: 0,
     rings: kind === MISSION_RINGS ? ringCourse() : [],
@@ -100,8 +103,12 @@ export function stepMission(mission, flightState, dt, events) {
       if (!mission.stripsLanded.includes(strip.name)) {
         mission.stripsLanded.push(strip.name);
         // Soft touchdown pays: slow vertical speed and low damage score best.
-        const softness = Math.max(0, 100 - Math.abs(flightState.verticalSpeed) * 12);
-        mission.score += 200 + Math.round(softness);
+        // Keep the rating on the mission so the HUD can name it.
+        const vs = Math.abs(flightState.verticalSpeed);
+        const softness = Math.max(0, 100 - vs * 12);
+        const bonus = 200 + Math.round(softness);
+        mission.score += bonus;
+        mission.lastLanding = { strip: strip.name, bonus, vs };
         if (mission.stripsLanded.length >= 3) {
           mission.done = true;
           mission.score += Math.max(0, Math.round(1200 - mission.elapsed * 4)) + Math.round(flightState.fuel * 5);

@@ -26,8 +26,37 @@ export function createRenderer(canvas) {
   sun.position.set(600, 900, 300);
   scene.add(sun);
   scene.add(new THREE.AmbientLight(0xbfd9ee, 0.9));
-  const hemi = new THREE.HemisphereLight(0xbfd9ee, 0x3d6b4a, 0.5);
+  const hemi = new THREE.HemisphereLight(0xbfd9ee, 0x3d6b4a, 0.65);
   scene.add(hemi);
+
+  // --- Squall rain for Storm Run: short streaks in a box that rides with
+  // the plane, so the storm is something you fly through, not just wind. ---
+  const RAIN_DROPS = 700;
+  const RAIN_BOX = { x: 260, y: 170, z: 260 };
+  const rainPos = new Float32Array(RAIN_DROPS * 2 * 3);
+  const rainSpeed = new Float32Array(RAIN_DROPS);
+  for (let i = 0; i < RAIN_DROPS; i++) {
+    rainPos[i * 6] = (Math.random() - 0.5) * RAIN_BOX.x;
+    rainPos[i * 6 + 1] = (Math.random() - 0.5) * RAIN_BOX.y;
+    rainPos[i * 6 + 2] = (Math.random() - 0.5) * RAIN_BOX.z;
+    rainPos[i * 6 + 3] = rainPos[i * 6];
+    rainPos[i * 6 + 4] = rainPos[i * 6 + 1] - 2.5;
+    rainPos[i * 6 + 5] = rainPos[i * 6 + 2];
+    rainSpeed[i] = 55 + Math.random() * 35;
+  }
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+  const rain = new THREE.LineSegments(
+    rainGeo,
+    new THREE.LineBasicMaterial({ color: 0xd6e9ff, transparent: true, opacity: 0.5 }),
+  );
+  rain.visible = false;
+  rain.frustumCulled = false;
+  scene.add(rain);
+  const skyClear = new THREE.Color(0x8fc7e8);
+  const skyStorm = new THREE.Color(0x5d7488);
+  const fogClear = new THREE.Fog(0xa8cfe8, 900, 3200);
+  const fogStorm = new THREE.Fog(0x7e93a6, 500, 2200);
 
   const terrain = buildTerrain(scene);
   const aircraft = buildAircraft();
@@ -76,10 +105,13 @@ export function createRenderer(canvas) {
   /**
    * Paint one frame.
    * snap: flight state snapshot {pos, heading, pitch, roll, speed, throttle, onGround}
-   * opts: {mode: 'chase'|'cockpit', time, rings, nextRing, showBeacon}
+   * opts: {mode: 'chase'|'cockpit', time, rings, nextRing, showBeacon, raining}
    */
   function draw(snap, opts) {
     const plane = aircraft.group;
+    // In the cockpit you are inside the plane: the model stays out of its
+    // own view, so the windscreen shows only the world ahead.
+    plane.visible = opts.mode !== 'cockpit';
     plane.position.copy(snap.pos);
     plane.rotation.order = 'YXZ';
     plane.rotation.y = snap.heading;
@@ -140,6 +172,35 @@ export function createRenderer(canvas) {
       mesh.rotation.z = Math.sin(t * 0.4 + i) * 0.08;
     });
     beacon.visible = !!opts.showBeacon;
+
+    // Squall: rain rides with the plane and the sky goes grey while the
+    // delivery is still outstanding; clear again once the medkit is down.
+    const raining = !!opts.raining;
+    rain.visible = raining;
+    if (raining) {
+      rain.position.copy(snap.pos);
+      const attr = rainGeo.attributes.position;
+      for (let i = 0; i < RAIN_DROPS; i++) {
+        let y = attr.array[i * 6 + 1] - rainSpeed[i] * realDt;
+        if (y < -RAIN_BOX.y / 2) {
+          y += RAIN_BOX.y;
+          attr.array[i * 6] = (Math.random() - 0.5) * RAIN_BOX.x;
+          attr.array[i * 6 + 2] = (Math.random() - 0.5) * RAIN_BOX.z;
+        }
+        attr.array[i * 6 + 1] = y;
+        attr.array[i * 6 + 4] = y - 2.5;
+        attr.array[i * 6 + 3] = attr.array[i * 6];
+        attr.array[i * 6 + 5] = attr.array[i * 6 + 2];
+      }
+      attr.needsUpdate = true;
+      scene.background = skyStorm;
+      scene.fog = fogStorm;
+      hemi.intensity = 0.35;
+    } else {
+      scene.background = skyClear;
+      scene.fog = fogClear;
+      hemi.intensity = 0.65;
+    }
 
     stepClouds(terrain.clouds, realDt);
     renderer.render(scene, camera);

@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { MISSION_RINGS, MISSION_HOP, MISSION_STORM, createMission, stormWind } from './missions.js';
 import { STRIPS, heightAt, stripForward } from './terrain.js';
+import { toast } from './hud.js';
 
 const DT = 1 / 60;
 
@@ -99,6 +100,8 @@ export function stageShot(name, game) {
     startAirborne(flight, 700, 72, -150, -1.0, 50, 88);
     autopilot(flight, mission.rings[2].pos, 6.5, { throttle: 0.72, gear: false });
     mission.elapsed = 42;
+    // The second ring was just banked: hold its score callout on screen.
+    toast('RING 2 — CLEAN! +100', 30000);
     return { mission, cameraMode: 'chase', showBeacon: false, overlay: 'none' };
   }
   if (name === 'rings') {
@@ -142,7 +145,9 @@ export function stageShot(name, game) {
       stopWhen: (s) => s.onGround || s.pos.y < strip.altitude + 8,
     });
     mission.elapsed = 131;
-    return { mission, cameraMode: 'chase', showBeacon: false, overlay: 'none' };
+    // Cockpit view: the runway through the windscreen, tapes and horizon
+    // live — the same approach the pilot flies, not a replay angle.
+    return { mission, cameraMode: 'cockpit', showBeacon: false, overlay: 'none' };
   }
   if (name === 'debrief') {
     // Storm Run complete: parked on Far Isle's south beach facing the open
